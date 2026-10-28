@@ -8,14 +8,25 @@ Windows 10/11 x64 便携壁纸选择器。将本机 Wallpaper Engine 的壁纸�
 
 ## 使用
 
-1. 将 `CodexWallpaper-1.0.0-win-x64.zip` 复制到另一台电脑并解压。
-2. 在那台电脑上先启动 Wallpaper Engine 和 Codex / ChatGPT 桌面客户端。
+1. 将 `CodexWallpaper-1.1.0-win-x64.zip` 复制到另一台电脑并解压，保留 `media` 文件夹。
+2. 在那台电脑上先启动 Wallpaper Engine。Codex 未打开时，软件会尝试启动官方 Windows 应用包；其他安装方式请手动打开 Codex。
 3. 双击 `CodexWallpaper.exe`。程序自动查找 Steam 安装位置、Steam 多库目录和本地壁纸。
-4. 左侧选择壁纸，右侧选择客户端窗口，点击 **应用到 Codex**。
+4. 左侧选择壁纸，右侧选择客户端窗口，选择是否勾选 **启用启动动画**，点击 **启动 / 应用到 Codex**。
 5. 调整壁纸可见度。默认 24%；数值越高，壁纸越明显、文字越淡。
 6. **恢复原样**、**Ctrl+Alt+F10** 或退出软件均可恢复原窗口。最小化会收进系统托盘，双击托盘图标重新打开。
 
 找不到引擎时，点“选择程序”选择 `wallpaper64.exe` 或 `wallpaper32.exe`。找不到壁纸时，点“添加壁纸目录”，选择 `steamapps/workshop/content/431960`、`projects/myprojects` 或一张壁纸的目录。它们必须已经下载到这台电脑。软件不复制、下载或分发壁纸。
+
+## 龙娘启动动画（v1.1）
+
+- 已集成 [Dragon Codex Boot](https://github.com/yushua0808-cpu/dragon-codex-boot) 的完整约 14 秒示例动画，原音轨以 25% 音量播放。来源、MIT 软件许可和媒体许可说明见 [第三方说明](THIRD_PARTY_NOTICES.md)。
+- **启用启动动画** 的选择会记住。取消勾选则直接启动 / 应用壁纸；**预览**只播放动画，不启动 Codex、不改变壁纸。
+- 动画与客户端/壁纸准备同时进行；未就绪时在 11.3 秒附近等待。正常末段在 12.7–13.65 秒原位交叉淡出，显示已经合成壁纸的真实客户端。保留原客户端位置与尺寸，横竖比例不同仍等比显示动画。
+- `Esc` 或“跳过动画”提前进入；如果客户端或壁纸还没准备好，会等准备结束再交接。`Ctrl+Alt+F10` 可取消整个启动流程并恢复原样。
+- 视频缺失、媒体组件失败或播放卡住时跳过动画；客户端等待超时会回到选择器并显示错误。运行时需要 Windows 的 H.264/AAC 媒体支持，Windows N 等缺少媒体组件的系统可能不能播放。
+- 成功进入后，选择器留在系统托盘。双击托盘图标可继续选壁纸，关闭选择器会恢复客户端外观。
+- 仅从此软件的“启动 / 应用”触发动画。不扫描或替换其他快捷方式、不设置开机自启、不改写 Codex 应用包。
+- 就绪判断依据窗口可响应且稳定、壁纸窗口出现及短暂预热；没有使用 Codex 官方内容加载完成事件，慢磁盘或复杂壁纸仍可能较晚显示完整内容。
 
 ## 显示方式与限制
 
@@ -39,9 +50,10 @@ Windows 10/11 x64 便携壁纸选择器。将本机 Wallpaper Engine 的壁纸�
 
 ## 源码与构建
 
-在 Windows PowerShell 中运行 `./build.ps1`。编译器为系统自带的 .NET Framework C# 编译器，产物位于 `dist/CodexWallpaper`。开发源码采用 C# 5，无第三方运行库。
+在 Windows PowerShell 中运行 `./build.ps1`。编译器为系统自带的 .NET Framework C# 编译器，产物位于 `dist/CodexWallpaper-1.1.0`。开发源码采用 C# 5，界面使用 WinForms/WPF，无第三方运行库。
 
 运行 `./tests/run.ps1` 检查库扫描、损坏项目、目录边界、等比布局、Windows 参数引用及本机 DWM/透明度恢复。
+运行 `./tests/startup.ps1` 检查动画状态与开关迁移；`./tests/startup.ps1 -Live` 在测试窗口验证实际媒体播放和淡出（约 20 秒）。这些实机测试要求可用的交互式 Windows 桌面。
 
 ## 依据
 

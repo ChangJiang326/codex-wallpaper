@@ -39,6 +39,9 @@ namespace CodexWallpaper {
         readonly TrackBar strength = new TrackBar();
         readonly Button apply;
         readonly NotifyIcon tray = new NotifyIcon();
+        readonly CheckBox startupAnimation = new CheckBox();
+        CancellationTokenSource startupCancellation;
+        BootOverlay boot;
         List<Wallpaper> wallpapers = new List<Wallpaper>();
         bool busy, closing;
 
@@ -73,8 +76,8 @@ namespace CodexWallpaper {
             library.SelectedIndexChanged += delegate { UpdateSelection(); }; left.Controls.Add(library); content.Controls.Add(left, 0, 0);
 
             var rightHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = surface, Margin = new Padding(0) };
-            var right = new TableLayoutPanel { Dock = DockStyle.Top, Height = 620, ColumnCount = 1, RowCount = 13, Padding = new Padding(16, 12, 16, 12), BackColor = surface, Margin = new Padding(0) };
-            int[] heights = { 118, 36, 20, 30, 20, 30, 22, 32, 20, 30, 42, 38 };
+            var right = new TableLayoutPanel { Dock = DockStyle.Top, Height = 654, ColumnCount = 1, RowCount = 14, Padding = new Padding(16, 12, 16, 12), BackColor = surface, Margin = new Padding(0) };
+            int[] heights = { 118, 36, 20, 30, 20, 30, 22, 32, 20, 30, 34, 42, 38 };
             foreach (int height in heights) right.RowStyles.Add(new RowStyle(SizeType.Absolute, height)); right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             preview.Dock = DockStyle.Fill; preview.SizeMode = PictureBoxSizeMode.Zoom; preview.BackColor = Color.FromArgb(12, 17, 22); right.Controls.Add(preview);
             selectedTitle.Text = "选择一张壁纸"; selectedTitle.Dock = DockStyle.Fill; selectedTitle.Font = new Font(Font, FontStyle.Bold); selectedTitle.TextAlign = ContentAlignment.MiddleLeft; right.Controls.Add(selectedTitle);
@@ -85,7 +88,12 @@ namespace CodexWallpaper {
             strength.Minimum = 5; strength.Maximum = 60; strength.Value = Math.Max(5, Math.Min(60, settings.Strength)); strength.TickStyle = TickStyle.None; strength.Dock = DockStyle.Fill; strength.AccessibleName = "壁纸可见度";
             strength.ValueChanged += delegate { settings.Strength = strength.Value; strengthText.Text = "壁纸可见度  " + settings.Strength + "%"; bridge.ApplyStrength(settings.Strength); Save(); }; right.Controls.Add(strength);
             right.Controls.Add(SectionLabel("缩放方式")); StyleCombo(fit); fit.Items.AddRange(new object[] { "完整显示 · 等比留边", "铺满窗口 · 等比裁切" }); fit.SelectedIndex = settings.Cover ? 1 : 0; fit.SelectedIndexChanged += delegate { settings.Cover = fit.SelectedIndex == 1; Save(); }; right.Controls.Add(fit);
-            apply = Button("应用到 Codex", async delegate { await Apply(); }); apply.BackColor = accent; apply.ForeColor = Color.FromArgb(13, 38, 32); apply.Font = new Font(Font, FontStyle.Bold); right.Controls.Add(apply); AcceptButton = apply;
+            var animationRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0) };
+            animationRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); animationRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+            startupAnimation.Text = "启用启动动画"; startupAnimation.Checked = settings.StartupAnimation; startupAnimation.Dock = DockStyle.Fill;
+            startupAnimation.CheckedChanged += delegate { settings.StartupAnimation = startupAnimation.Checked; Save(); };
+            animationRow.Controls.Add(startupAnimation); animationRow.Controls.Add(Button("预览", async delegate { await PreviewAnimation(); })); right.Controls.Add(animationRow);
+            apply = Button("启动 / 应用到 Codex", async delegate { await Apply(); }); apply.BackColor = accent; apply.ForeColor = Color.FromArgb(13, 38, 32); apply.Font = new Font(Font, FontStyle.Bold); right.Controls.Add(apply); AcceptButton = apply;
             right.Controls.Add(Button("恢复原样  ·  Ctrl + Alt + F10", delegate { Restore(); }));
             var note = new Label { Text = "兼容模式会同时影响文字透明度。\n关闭选择器自动恢复；最小化可留在托盘。", ForeColor = muted, Dock = DockStyle.Fill, Font = new Font(Font.FontFamily, 8), Padding = new Padding(0, 5, 0, 0) }; right.Controls.Add(note); rightHost.Controls.Add(right); content.Controls.Add(rightHost, 1, 0);
             status.Dock = DockStyle.Fill; status.ForeColor = accent; status.TextAlign = ContentAlignment.MiddleLeft; status.Text = "准备扫描本机壁纸库…"; root.Controls.Add(status, 0, 3);
@@ -129,26 +137,61 @@ namespace CodexWallpaper {
             string query = search.Text.Trim(); library.BeginUpdate(); library.Items.Clear();
             for (int i = 0; i < wallpapers.Count; i++) { var w = wallpapers[i]; if (query.Length > 0 && w.Title.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) < 0 && w.Type.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue; var item = new ListViewItem(w.Title + "\n" + w.Type.ToUpperInvariant(), i) { Tag = w, ToolTipText = w.Title }; library.Items.Add(item); }
             library.EndUpdate(); count.Text = "本地壁纸库  /  " + library.Items.Count + " 张   ·   上方输入名称或 scene / video / web 搜索";
-            if (library.Items.Count > 0) library.Items[0].Selected = true; else UpdateSelection();
+            if (library.Items.Count > 0) { var remembered = library.Items.Cast<ListViewItem>().FirstOrDefault(i => ((Wallpaper)i.Tag).Project == settings.LastProject); (remembered ?? library.Items[0]).Selected = true; } else UpdateSelection();
         }
         void UpdateSelection() {
             var w = library.SelectedItems.Count > 0 ? library.SelectedItems[0].Tag as Wallpaper : null;
             var old = preview.Image; preview.Image = w == null ? null : Library.Thumbnail(w.Preview, 600, 330); if (old != null) old.Dispose();
             selectedTitle.Text = w == null ? "选择一张壁纸" : w.Title;
         }
-        void RefreshTargets() { targets.Items.Clear(); foreach (var t in Native.Targets()) targets.Items.Add(t); if (targets.Items.Count > 0) targets.SelectedIndex = 0; else status.Text = "未找到 Codex / ChatGPT 桌面窗口。打开客户端后点击刷新。"; }
+        void RefreshTargets() { targets.Items.Clear(); foreach (var t in Native.Targets()) targets.Items.Add(t); if (targets.Items.Count > 0) targets.SelectedIndex = 0; else status.Text = "Codex 尚未打开，点击“启动 / 应用”将尝试启动客户端。"; }
+        async Task PreviewAnimation() {
+            if (busy) return;
+            busy = true; apply.Enabled = false;
+            try {
+                boot = new BootOverlay(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "media", "startup.mp4"), null);
+                boot.SetReady(null); boot.Show(); await boot.Finished;
+                if (!closing) { Show(); Activate(); status.Text = boot.Failure ?? "预览结束。应用时会衔接到当前壁纸与真实 Codex 窗口。"; }
+            } finally { if (boot != null) boot.Abort(); boot = null; busy = false; if (!closing) apply.Enabled = true; }
+        }
         async Task Apply() {
             if (busy) return;
             if (library.SelectedItems.Count == 0) { status.Text = "请先在左侧选择壁纸。"; return; }
-            if (targets.SelectedItem == null) { RefreshTargets(); if (targets.SelectedItem == null) return; }
+            if (targets.SelectedItem == null) RefreshTargets();
+            var selected = targets.SelectedItem as Target;
+            var wallpaper = (Wallpaper)library.SelectedItems[0].Tag;
+            if (!File.Exists(settings.Engine)) { status.Text = "请先选择 Wallpaper Engine 程序路径。"; return; }
             busy = true; apply.Enabled = false; status.Text = "正在启动专用于 Codex 的壁纸窗口…";
-            try { await bridge.Start(settings, (Wallpaper)library.SelectedItems[0].Tag, (Target)targets.SelectedItem); if (!closing) status.Text = bridge.Active ? "已应用 · 跟随 Codex 移动和缩放 · 点击恢复可随时撤销" : "已恢复 Codex 原样。"; }
-            catch (Exception ex) { if (!closing) status.Text = ex.Message; Storage.Log(ex.ToString()); }
-            finally { busy = false; if (!closing) apply.Enabled = true; }
+            startupCancellation = new CancellationTokenSource(); var token = startupCancellation.Token;
+            try {
+                if (settings.StartupAnimation) {
+                    boot = new BootOverlay(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "media", "startup.mp4"), selected);
+                    boot.FirstFrame += delegate { if (!closing) Hide(); };
+                    boot.Show();
+                }
+                var target = await ClientStartup.WaitForClient(selected, token);
+                await bridge.Start(settings, wallpaper, target, token);
+                // Give the engine time to present frames before exposing the compositor.
+                await Task.Delay(650, token); bridge.Tick(settings);
+                if (boot != null) { boot.SetReady(target); await boot.Finished; }
+                token.ThrowIfCancellationRequested();
+                settings.LastProject = wallpaper.Project; Save();
+                if (!closing) {
+                    status.Text = boot != null && boot.Failure != null ? boot.Failure : "已应用 · 在托盘中可重新打开选择器 · Ctrl + Alt + F10 恢复";
+                    Hide(); Native.SetForegroundWindow(target.Handle);
+                }
+            }
+            catch (OperationCanceledException) { bridge.Stop(); if (!closing) status.Text = "已取消启动，Codex 原样已恢复。"; }
+            catch (Exception ex) { bridge.Stop(); if (!closing) { status.Text = ex.Message; Show(); Activate(); } Storage.Log(ex.ToString()); }
+            finally {
+                if (boot != null) boot.Abort(); boot = null;
+                startupCancellation.Dispose(); startupCancellation = null;
+                busy = false; if (!closing) apply.Enabled = true;
+            }
         }
-        public void Restore() { bridge.Stop(); status.Text = "已恢复 Codex 原样。"; }
+        public void Restore() { if (startupCancellation != null) startupCancellation.Cancel(); if (boot != null) boot.Abort(); bridge.Stop(); status.Text = "已恢复 Codex 原样。"; }
         protected override void WndProc(ref Message m) { if (m.Msg == 0x312 && m.WParam.ToInt32() == 1) Restore(); base.WndProc(ref m); }
-        protected override void OnFormClosing(FormClosingEventArgs e) { closing = true; timer.Stop(); bridge.Dispose(); Native.UnregisterHotKey(Handle, 1); tray.Visible = false; tray.Dispose(); Save(); base.OnFormClosing(e); }
+        protected override void OnFormClosing(FormClosingEventArgs e) { closing = true; Restore(); timer.Stop(); bridge.Dispose(); Native.UnregisterHotKey(Handle, 1); tray.Visible = false; tray.Dispose(); Save(); base.OnFormClosing(e); }
         protected override void Dispose(bool disposing) { if (disposing) { timer.Dispose(); bridge.Dispose(); thumbnails.Dispose(); if (preview.Image != null) preview.Image.Dispose(); } base.Dispose(disposing); }
     }
 }

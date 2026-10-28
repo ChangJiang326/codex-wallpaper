@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace CodexWallpaper {
     public sealed class Bridge : IDisposable {
@@ -24,8 +25,9 @@ namespace CodexWallpaper {
             if (s.IndexOf('"') >= 0 || s.IndexOf('\r') >= 0 || s.IndexOf('\n') >= 0) throw new ArgumentException("路径包含无效字符。");
             return "\"" + s + "\"";
         }
-        public async Task Start(Settings settings, Wallpaper wallpaper, Target target) {
+        public async Task Start(Settings settings, Wallpaper wallpaper, Target target, CancellationToken token = default(CancellationToken)) {
             Stop();
+            token.ThrowIfCancellationRequested();
             if (target == null || !Native.IsWindow(target.Handle)) throw new InvalidOperationException("请先打开 Codex，然后刷新窗口列表。");
             if (!File.Exists(wallpaper.Project)) throw new FileNotFoundException("壁纸文件已移动，请重新扫描。");
             bool engineRunning = Process.GetProcessesByName("wallpaper32").Length > 0 || Process.GetProcessesByName("wallpaper64").Length > 0;
@@ -50,7 +52,7 @@ namespace CodexWallpaper {
                 Command(settings.Engine, "-control openWallpaper -file " + Quote(wallpaper.Project) + " -playInWindow " + Quote(r.WindowName) +
                     " -width " + sourceWidth + " -height " + sourceHeight + " -x -16000 -y -16000 -borderless 1 -activate 0");
                 for (int i = 0; i < 150; i++) {
-                    await Task.Delay(100);
+                    await Task.Delay(100, token);
                     if (recovery != r) { CloseWallpaper(r); return; }
                     source = Native.FindTitle(r.WindowName);
                     if (source != IntPtr.Zero) break;
