@@ -1,0 +1,16 @@
+name: Build portable Windows app
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with Windows .NET Framework
+        shell: pwsh
+        run: ./build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CodexWallpaper-win-x64
+          path: dist/*.zip

@@ -1,0 +1,4 @@
+dist/
+tests/*.exe
+tests/*.pdb
+tests/live-results.txt
