@@ -18,6 +18,8 @@ namespace CodexWallpaper {
         public bool Cover = false;
         public bool StartupAnimation = true;
         public string LastProject = "";
+        public bool AutoApply = true;
+        public bool StartWithWindows = true;
     }
     public static class Storage {
         public static readonly string Root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexWallpaper");

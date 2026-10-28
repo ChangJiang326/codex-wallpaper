@@ -13,6 +13,7 @@ namespace CodexWallpaper {
         int sourceWidth, sourceHeight;
         bool suspended;
         public bool Active { get { return recovery != null; } }
+        public IntPtr TargetHandle { get { return recovery == null ? IntPtr.Zero : new IntPtr(recovery.Handle); } }
         public static void Command(string engine, string args) {
             if (!File.Exists(engine)) throw new FileNotFoundException("请先选择 Wallpaper Engine 程序路径。", engine);
             Process.Start(new ProcessStartInfo(engine, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(engine) }).Dispose();
@@ -78,7 +79,7 @@ namespace CodexWallpaper {
         }
         public void Tick(Settings settings) {
             if (recovery == null || backdrop == null) return;
-            if (!recovery.Matches()) { Stop(); throw new InvalidOperationException("Codex 窗口已关闭。重新打开后可再次应用。"); }
+            if (!recovery.Matches()) { Stop(); return; }
             if (!Native.IsWindow(source)) { Stop(); throw new InvalidOperationException("壁纸渲染窗口已关闭，Codex 外观已恢复。"); }
             IntPtr target = new IntPtr(recovery.Handle);
             int cloaked; Native.DwmGetIntAttribute(target, 14, out cloaked, 4);

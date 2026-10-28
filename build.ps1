@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Building requires Windows x64 with .NET Framework 4.x.' }
-$outputDir = Join-Path $projectRoot 'dist\CodexWallpaper-1.1.0'
+$outputDir = Join-Path $projectRoot 'dist\CodexWallpaper-1.2.0'
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 $sources = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs' | ForEach-Object FullName
 $wpf = Join-Path (Split-Path -Parent $compiler) 'WPF'
@@ -17,5 +17,5 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'media\startup.mp4'),(Join-Path $
 Copy-Item -LiteralPath (Join-Path $projectRoot 'third_party\dragon-codex-boot\LICENSE') -Destination (Join-Path $outputDir 'licenses\DragonCodexBoot-MIT.txt')
 $checksum = Get-FileHash -LiteralPath (Join-Path $outputDir 'CodexWallpaper.exe') -Algorithm SHA256
 Set-Content -LiteralPath (Join-Path $outputDir 'SHA256SUMS.txt') -Value ($checksum.Hash + '  CodexWallpaper.exe') -Encoding ASCII
-Compress-Archive -LiteralPath $outputDir -DestinationPath (Join-Path $projectRoot 'dist\CodexWallpaper-1.1.0-win-x64.zip') -Force
+Compress-Archive -LiteralPath $outputDir -DestinationPath (Join-Path $projectRoot 'dist\CodexWallpaper-1.2.0-win-x64.zip') -Force
 $checksum

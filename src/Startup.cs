@@ -29,20 +29,25 @@ namespace CodexWallpaper {
             if (Native.DwmGetWindowAttribute(target, 9, out r, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Native.Rect))) != 0) Native.GetWindowRect(target, out r);
             return new Rectangle(r.Left, r.Top, Math.Max(1, r.Width), Math.Max(1, r.Height));
         }
-        public static async Task<Target> WaitForClient(Target selected, CancellationToken token) {
+        public static async Task<Target> WaitForClient(Target selected, CancellationToken token, bool allowLaunch = true) {
             token.ThrowIfCancellationRequested();
             Target target = selected != null && Native.IsWindow(selected.Handle) ? selected : null;
             if (target == null) { var found = Native.Targets(); if (found.Count > 0) target = found[0]; }
             if (target == null) {
+                if (!allowLaunch) throw new OperationCanceledException("检测到的客户端已关闭。", token);
                 // The package identity is stable across versions; never launch the CLI helper.
                 Process.Start(new ProcessStartInfo("explorer.exe", @"shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App") { UseShellExecute = true }).Dispose();
             }
             var clock = Stopwatch.StartNew(); IntPtr stable = IntPtr.Zero; double since = 0;
             while (clock.Elapsed.TotalSeconds < 60) {
                 token.ThrowIfCancellationRequested();
+                if (!allowLaunch && target != null && !Native.IsWindow(target.Handle)) throw new OperationCanceledException("客户端已关闭。", token);
                 if (target == null || !Native.IsWindow(target.Handle)) { var found = Native.Targets(); target = found.Count > 0 ? found[0] : null; }
                 if (target != null) {
-                    if (Native.IsIconic(target.Handle)) Native.ShowWindow(target.Handle, 9);
+                    if (Native.IsIconic(target.Handle)) {
+                        if (!allowLaunch) throw new OperationCanceledException("客户端已最小化，等待下次显示。", token);
+                        Native.ShowWindow(target.Handle, 9);
+                    }
                     IntPtr result;
                     bool responds = Native.SendMessageTimeout(target.Handle, 0, IntPtr.Zero, IntPtr.Zero, 2, 80, out result) != IntPtr.Zero;
                     Rectangle r = Bounds(target.Handle); int cloaked;
@@ -114,7 +119,7 @@ namespace CodexWallpaper {
                 target = t.Handle;
                 // Put the real, wallpaper-composited client immediately beneath the video.
                 // Keep the client's existing geometry and fade in-place, without stretching it.
-                Native.SetWindowPos(target, host, 0, 0, 0, 0, 0x13);
+                if (Native.GetForegroundWindow() == host) Native.SetWindowPos(target, host, 0, 0, 0, 0, 0x13);
             }
             ready = true;
         }

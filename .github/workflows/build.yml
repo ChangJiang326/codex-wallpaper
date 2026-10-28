@@ -10,6 +10,9 @@ jobs:
       - name: Build with Windows .NET Framework
         shell: pwsh
         run: ./build.ps1
+      - name: Check background lifecycle policy and startup registration
+        shell: pwsh
+        run: ./tests/background.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: CodexWallpaper-win-x64
