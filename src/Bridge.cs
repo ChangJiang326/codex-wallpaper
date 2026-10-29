@@ -12,6 +12,7 @@ namespace CodexWallpaper {
         IntPtr source;
         int sourceWidth, sourceHeight;
         bool suspended;
+        Native.Rect lastBounds;
         public bool Active { get { return recovery != null; } }
         public IntPtr TargetHandle { get { return recovery == null ? IntPtr.Zero : new IntPtr(recovery.Handle); } }
         public static void Command(string engine, string args) {
@@ -33,6 +34,11 @@ namespace CodexWallpaper {
             if (!File.Exists(wallpaper.Project)) throw new FileNotFoundException("壁纸文件已移动，请重新扫描。");
             bool engineRunning = Process.GetProcessesByName("wallpaper32").Length > 0 || Process.GetProcessesByName("wallpaper64").Length > 0;
             if (!engineRunning) throw new InvalidOperationException("请先启动 Wallpaper Engine，再应用壁纸。");
+            var preparation=Stopwatch.StartNew();
+            double ratio = await Library.AspectAsync(wallpaper, settings.Ratio,token);
+            Storage.Log("wallpaper-metadata-ready ms="+preparation.ElapsedMilliseconds);
+            token.ThrowIfCancellationRequested();
+            if(!Native.IsWindow(target.Handle))throw new OperationCanceledException("客户端已关闭。",token);
             int style = Native.GetWindowLong(target.Handle, Native.ExStyle);
             uint key, flags; byte alpha;
             bool attrs = Native.GetLayeredWindowAttributes(target.Handle, out key, out alpha, out flags);
@@ -47,7 +53,6 @@ namespace CodexWallpaper {
                     Process.Start(new ProcessStartInfo(System.Windows.Forms.Application.ExecutablePath,
                         "--watch " + parent.Id + " " + parent.StartTime.ToUniversalTime().Ticks + " " + r.WindowName) { UseShellExecute = false, CreateNoWindow = true }).Dispose();
                 }
-                double ratio = Library.Aspect(wallpaper, settings.Ratio);
                 sourceWidth = ratio >= 1 ? 1600 : (int)Math.Round(1000 * ratio);
                 sourceHeight = (int)Math.Round(sourceWidth / ratio);
                 Command(settings.Engine, "-control openWallpaper -file " + Quote(wallpaper.Project) + " -playInWindow " + Quote(r.WindowName) +
@@ -94,7 +99,11 @@ namespace CodexWallpaper {
             if (Native.DwmGetWindowAttribute(target, 9, out rect, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Native.Rect))) != 0) Native.GetWindowRect(target, out rect);
             if (rect.Width < 1 || rect.Height < 1) return;
             // Insert directly behind Codex, never make either window topmost or steal focus.
-            Native.SetWindowPos(backdrop.Handle, target, rect.Left, rect.Top, rect.Width, rect.Height, 0x10 | 0x40);
+            if(!backdrop.Visible)backdrop.Show();
+            if(rect.Left!=lastBounds.Left || rect.Top!=lastBounds.Top || rect.Width!=lastBounds.Width || rect.Height!=lastBounds.Height || Native.GetWindow(target,2)!=backdrop.Handle) {
+                Native.SetWindowPos(backdrop.Handle, target, rect.Left, rect.Top, rect.Width, rect.Height, 0x10 | 0x40);
+                lastBounds=rect;
+            }
             backdrop.LayoutVideo(sourceWidth, sourceHeight, settings.Cover);
         }
         public void Stop() {
@@ -105,7 +114,7 @@ namespace CodexWallpaper {
                 if (saved.WindowName == r.WindowName) { try { File.Delete(Path.Combine(Storage.Root, RecoveryFile)); } catch { } }
             }
             if (backdrop != null) { backdrop.Dispose(); backdrop = null; }
-            source = IntPtr.Zero; suspended = false;
+            source = IntPtr.Zero; suspended = false; lastBounds=new Native.Rect();
         }
         public void Dispose() { Stop(); }
         public static void Recover() {

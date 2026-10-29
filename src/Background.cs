@@ -46,11 +46,16 @@ namespace CodexWallpaper {
     }
     // Clock supplied by the caller so retries and manual suppression can be tested.
     public sealed class AutoApplyGate {
-        sealed class State { public int Failures; public double RetryAt; public bool Suppressed, Attempted; }
+        sealed class State { public int Failures; public double RetryAt, SeenAt = -1; public bool Suppressed, Attempted; }
         readonly Dictionary<string,State> windows = new Dictionary<string,State>();
         State Get(string identity) { State s; if (!windows.TryGetValue(identity,out s)) windows.Add(identity,s=new State()); return s; }
         public bool CanAttempt(string identity,double now) { var s=Get(identity); return !s.Suppressed && s.Failures<3 && now>=s.RetryAt; }
         public bool FirstAttempt(string identity) { return !Get(identity).Attempted; }
+        public bool WaitForForeground(string identity,double now,bool foreground,bool animationEnabled) {
+            var s=Get(identity); if(s.SeenAt<0)s.SeenAt=now;
+            // A cold client can be visible before Explorer transfers foreground to it.
+            return animationEnabled && !s.Attempted && !foreground && now-s.SeenAt<10;
+        }
         public void Begin(string identity) { Get(identity).Attempted=true; }
         public void Success(string identity,double now) { var s=Get(identity); s.Failures=0; s.RetryAt=now+3; s.Attempted=true; }
         public void Failure(string identity,double now) { var s=Get(identity); s.Failures++; s.RetryAt=now+10; }

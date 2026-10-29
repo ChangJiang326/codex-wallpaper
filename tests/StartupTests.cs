@@ -38,11 +38,29 @@ class StartupTests {
             try {
                 var t=new Target {Handle=target.Handle}; Rectangle before=ClientStartup.Bounds(target.Handle);
                 using(var holder=new OverlayHolder(new BootOverlay(Path.GetFullPath(path),t))) {
-                    holder.Value.Show(); holder.Value.SetReady(t);
+                    bool firstFrame=false; holder.Value.FirstFrame+=delegate {firstFrame=true;};
+                    holder.Value.Show();
+                    Check(Native.GetWindow(new System.Windows.Interop.WindowInteropHelper(holder.Value).Handle,4)==t.Handle,"startup video stays owned above the client during late client activation");
+                    await Task.Delay(22000);
+                    Check(firstFrame && holder.Value.Opacity>.9 && !holder.Value.Finished.IsCompleted,"slow wallpaper preparation keeps animation visible at its waiting frame");
+                    holder.Value.SetReady(t);
                     await Timeout(holder.Value.Finished,20000);
                     Check(holder.Value.Failure==null,"bundled H.264 video decodes and natural handoff completes");
                 }
                 Check(ClientStartup.Bounds(target.Handle)==before,"handoff preserves target position and size");
+                string audioOnly=Path.Combine(Path.GetTempPath(),"CodexWallpaper-audio-"+Guid.NewGuid()+".wav");
+                try {
+                    using(var writer=new BinaryWriter(File.Create(audioOnly))) {
+                        writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));writer.Write(36+16000);
+                        writer.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt "));writer.Write(16);writer.Write((short)1);writer.Write((short)1);
+                        writer.Write(8000);writer.Write(16000);writer.Write((short)2);writer.Write((short)16);
+                        writer.Write(System.Text.Encoding.ASCII.GetBytes("data"));writer.Write(16000);writer.Write(new byte[16000]);
+                    }
+                    using(var holder=new OverlayHolder(new BootOverlay(audioOnly,t))) {
+                        holder.Value.Show();await Timeout(holder.Value.Finished,6000);
+                        Check(holder.Value.Failure!=null,"audio-only decode closes player without waiting for client or leaving blank video");
+                    }
+                } finally { File.Delete(audioOnly); }
                 using(var holder=new OverlayHolder(new BootOverlay(Path.Combine(Path.GetTempPath(),"missing-animation-"+Guid.NewGuid()+".mp4"),t))) {
                     holder.Value.Show(); holder.Value.SetReady(t); await Timeout(holder.Value.Finished,3000);
                     Check(holder.Value.Failure!=null,"missing video falls through without blank-screen hang");

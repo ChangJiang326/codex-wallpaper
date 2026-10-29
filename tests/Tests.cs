@@ -50,6 +50,8 @@ class Tests {
             if (args.Contains("--local")) {
                 var settings = new Settings { Engine = Library.DetectEngine() }; int ignored;
                 var video = Library.Scan(Library.Roots(settings), out ignored).First(x => x.Type == "video");
+                double asyncAspect=Library.AspectAsync(video,0,System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                Check(Math.Abs(asyncAspect-Library.Aspect(video,0))<.0001,"worker STA reads the same video ratio as synchronous metadata");
                 double ratio = Library.VideoAspect(video.Project);
                 Check(ratio > 0, "Windows reads actual local video dimensions: " + ratio.ToString("0.0000"));
             }

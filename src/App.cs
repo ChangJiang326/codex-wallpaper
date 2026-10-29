@@ -125,6 +125,7 @@ namespace CodexWallpaper {
             };
         }
         public void InitializeBackground() {
+            Storage.Log("app-start v1.2.1 profile="+!String.IsNullOrWhiteSpace(settings.LastProject)+" animation="+settings.StartupAnimation);
             var hwnd=Handle;
             if (!Native.RegisterHotKey(hwnd,1,0x4003,0x79)) Storage.Log("Ctrl+Alt+F10 unavailable (already registered).");
             if (!String.IsNullOrWhiteSpace(settings.LastProject)) {
@@ -145,10 +146,12 @@ namespace CodexWallpaper {
                 if(target==null)return;
                 string identity=BackgroundWatch.Identity(target);
                 if(!gate.CanAttempt(identity,monitorClock.Elapsed.TotalSeconds))return;
-                bool animate=settings.StartupAnimation && gate.FirstAttempt(identity) && Native.GetForegroundWindow()==target.Handle;
+                bool foreground=Native.GetForegroundWindow()==target.Handle;
+                if(gate.WaitForForeground(identity,monitorClock.Elapsed.TotalSeconds,foreground,settings.StartupAnimation))return;
+                bool animate=settings.StartupAnimation && gate.FirstAttempt(identity) && foreground;
+                Storage.Log("auto-detected animation="+animate+" foreground="+foreground);
                 attemptIdentity=identity; gate.Begin(identity);
-                Wallpaper saved=BackgroundWatch.SavedWallpaper(settings);
-                await RunWallpaper(saved,target,true,animate);
+                await RunWallpaper(null,target,true,animate);
             } catch(Exception ex) {
                 if(attemptIdentity!=null)gate.Failure(attemptIdentity,monitorClock.Elapsed.TotalSeconds);
                 status.Text=ex.Message; Storage.Log("auto-apply: "+ex.Message);
@@ -224,14 +227,18 @@ namespace CodexWallpaper {
             busy = true; apply.Enabled = false; status.Text = "正在启动专用于 Codex 的壁纸窗口…";
             startupCancellation = new CancellationTokenSource(); var token = startupCancellation.Token;
             try {
+                if(wallpaper==null)wallpaper=await Task.Run(()=>BackgroundWatch.SavedWallpaper(settings),token);
+                var target = await ClientStartup.WaitForClient(selected, token, !automatic);
+                Storage.Log("client-ready");
+                if(automatic && Native.GetForegroundWindow()!=target.Handle)animate=false;
                 if (animate) {
-                    boot = new BootOverlay(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "media", "startup.mp4"), selected);
+                    boot = new BootOverlay(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "media", "startup.mp4"), target, automatic);
                     boot.FirstFrame += delegate { if (!closing && !automatic) Hide(); };
                     boot.Show();
                 }
-                var target = await ClientStartup.WaitForClient(selected, token, !automatic);
                 attemptIdentity=BackgroundWatch.Identity(target); gate.Begin(attemptIdentity);
                 await BackgroundWatch.EnsureEngine(settings,token);
+                Storage.Log("engine-process-ready");
                 await bridge.Start(settings, wallpaper, target, token);
                 // Give the engine time to present frames before exposing the compositor.
                 await Task.Delay(650, token); bridge.Tick(settings);

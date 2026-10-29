@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 
 namespace CodexWallpaper {
@@ -132,6 +134,18 @@ namespace CodexWallpaper {
             }
             try { using (var img = Image.FromFile(w.Preview)) { return Math.Max(0.25, Math.Min(4, (double)img.Width / img.Height)); } }
             catch { return 16.0 / 9; }
+        }
+        public static async Task<double> AspectAsync(Wallpaper wallpaper,int choice,CancellationToken token) {
+            token.ThrowIfCancellationRequested();
+            var result=new TaskCompletionSource<double>();
+            // Shell metadata may block on a cold disk. Keep COM on its own STA,
+            // never on the WinForms/WPF dispatcher that presents the startup video.
+            var worker=new Thread(()=>{ try { result.TrySetResult(Aspect(wallpaper,choice)); } catch(Exception ex) { Storage.Log("wallpaper-metadata: "+ex.Message); result.TrySetResult(16.0/9); } });
+            worker.IsBackground=true; worker.SetApartmentState(ApartmentState.STA); worker.Start();
+            var winner=await Task.WhenAny(result.Task,Task.Delay(15000,token)).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            if(winner!=result.Task)throw new TimeoutException("读取壁纸尺寸超时，请手动选择画面比例后重试。");
+            return await result.Task.ConfigureAwait(false);
         }
         public static double VideoAspect(string project) {
             object shell = null, folder = null, item = null;

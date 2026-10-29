@@ -78,10 +78,15 @@ namespace CodexWallpaper {
         public event Action FirstFrame;
         public string Failure { get; private set; }
 
-        public BootOverlay(string videoPath, Target selected) {
+        public BootOverlay(string videoPath, Target selected, bool passive = false) {
             video = videoPath;
             Title = "Codex Wallpaper · 龙娘启动动画";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false;
+            ShowActivated = !passive;
+            if(selected!=null && Native.IsWindow(selected.Handle)) {
+                target=selected.Handle;
+                new WindowInteropHelper(this).Owner=target;
+            }
             Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(18, 23, 29));
             // No persistent topmost flag: normal window stacking and focus still work with Alt+Tab.
             Opacity = 0; WindowStartupLocation = WindowStartupLocation.Manual;
@@ -107,19 +112,22 @@ namespace CodexWallpaper {
                 if (!File.Exists(video)) { MediaFailure("启动动画文件缺失，已直接进入 Codex。"); return; }
                 media.Source = new Uri(Path.GetFullPath(video)); media.Play();
             };
-            media.MediaOpened += delegate { opened = true; lastProgress = wall.Elapsed.TotalSeconds; Storage.Log("boot-media-opened"); };
+            media.MediaOpened += delegate {
+                if(media.NaturalVideoWidth<=0 || media.NaturalVideoHeight<=0) { MediaFailure("动画未解码出视频画面，已关闭播放器并直接进入客户端。"); return; }
+                opened = true; lastProgress = wall.Elapsed.TotalSeconds; Storage.Log("boot-media-opened "+media.NaturalVideoWidth+"x"+media.NaturalVideoHeight);
+            };
             media.MediaFailed += delegate(object s, ExceptionRoutedEventArgs e) { MediaFailure("启动动画无法播放，已直接进入 Codex。" + e.ErrorException.Message); };
             media.MediaEnded += delegate { skip = true; };
             Closed += delegate { done = true; timer.Stop(); media.Close(); finished.TrySetResult(true); };
         }
-        void MediaFailure(string message) { Failure = message; failed = true; skip = true; Storage.Log(message); }
+        void MediaFailure(string message) { Failure = message; failed = true; skip = true; Storage.Log(message); Abort(); }
         public void SetReady(Target t) {
             if (done) return;
             if (t != null && Native.IsWindow(t.Handle)) {
                 target = t.Handle;
                 // Put the real, wallpaper-composited client immediately beneath the video.
                 // Keep the client's existing geometry and fade in-place, without stretching it.
-                if (Native.GetForegroundWindow() == host) Native.SetWindowPos(target, host, 0, 0, 0, 0, 0x13);
+                new WindowInteropHelper(this).Owner=target;
             }
             ready = true;
         }
@@ -129,9 +137,10 @@ namespace CodexWallpaper {
             if (done) return;
             double now = wall.Elapsed.TotalSeconds, pos = opened ? media.Position.TotalSeconds : 0;
             if (now > 80) { MediaFailure("启动过渡超时。"); Abort(); return; }
-            if (!opened && now > 10 && !failed) MediaFailure("媒体组件未能及时打开动画，已跳过。");
+            if(target!=IntPtr.Zero && !Native.IsWindow(target)) { Abort(); return; }
+            if (!opened && now > 20 && !failed) { MediaFailure("媒体组件未能及时打开动画，已跳过。"); return; }
             if (opened && !holding && pos > lastPosition + .01) { lastProgress = now; lastPosition = pos; }
-            if (opened && !holding && now-lastProgress > 6 && !failed) MediaFailure("媒体播放停止推进，已跳过动画。");
+            if (opened && !holding && now-lastProgress > 6 && !failed) { MediaFailure("媒体播放停止推进，已跳过动画。"); return; }
             if (firstFrame < 0 && opened && pos > .03) { firstFrame = now; var callback = FirstFrame; if (callback != null) callback(); }
             if (StartupTiming.Hold(pos, ready) && !holding && !skip) { media.Pause(); media.Position = TimeSpan.FromSeconds(StartupTiming.HoldAt); holding = true; }
             if (holding && ready) { holding = false; lastProgress = now; media.Play(); }

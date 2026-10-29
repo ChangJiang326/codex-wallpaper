@@ -57,15 +57,17 @@ namespace CodexWallpaper {
         }
         public static List<Target> Targets() {
             var result = new List<Target>();
+            var ids=new HashSet<uint>();
+            foreach(string name in new[]{"chatgpt","codex"})foreach(var p in Process.GetProcessesByName(name))using(p)ids.Add((uint)p.Id);
+            if(ids.Count==0)return result;
             EnumWindows(delegate(IntPtr h, IntPtr _) {
                 if (!IsWindowVisible(h) || GetWindow(h, 4) != IntPtr.Zero) return true;
-                try { using (var p = Process.GetProcessById((int)Pid(h))) {
-                    string name = p.ProcessName.ToLowerInvariant();
-                    if (name != "chatgpt" && name != "codex") return true;
+                try {
+                    uint pid=Pid(h); if(!ids.Contains(pid))return true;
                     var cls = new StringBuilder(256); GetClassName(h, cls, 256);
                     if (!cls.ToString().StartsWith("Chrome_WidgetWin_", StringComparison.Ordinal)) return true;
-                    result.Add(new Target { Handle = h, Label = Title(h) + "  ·  " + p.Id });
-                }} catch { }
+                    result.Add(new Target { Handle = h, Label = Title(h) + "  ·  " + pid });
+                } catch { }
                 return true;
             }, IntPtr.Zero);
             return result;
@@ -97,6 +99,8 @@ namespace CodexWallpaper {
     }
     public class Backdrop : Form {
         IntPtr thumb;
+        int lastWidth,lastHeight,lastSourceWidth,lastSourceHeight;
+        bool lastCover;
         public Backdrop() {
             FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; BackColor = Color.Black;
             StartPosition = FormStartPosition.Manual; Text = "Codex Wallpaper · 背景";
@@ -111,6 +115,7 @@ namespace CodexWallpaper {
         public void LayoutVideo(int sw, int sh, bool cover) {
             int w = ClientSize.Width, h = ClientSize.Height;
             if (w < 1 || h < 1 || thumb == IntPtr.Zero) return;
+            if(w==lastWidth && h==lastHeight && sw==lastSourceWidth && sh==lastSourceHeight && cover==lastCover)return;
             Rectangle dest = Library.Fit(sw, sh, w, h, false);
             Rectangle src = new Rectangle(0, 0, sw, sh);
             if (cover) {
@@ -122,6 +127,7 @@ namespace CodexWallpaper {
             var props = new Native.ThumbnailProps { Flags = 31, Destination = Native.ToRect(dest), Source = Native.ToRect(src), Opacity = 255, Visible = true, ClientOnly = true };
             int hr = Native.DwmUpdateThumbnailProperties(thumb, ref props);
             if (hr != 0) Marshal.ThrowExceptionForHR(hr);
+            lastWidth=w; lastHeight=h; lastSourceWidth=sw; lastSourceHeight=sh; lastCover=cover;
         }
         protected override void Dispose(bool disposing) { if (thumb != IntPtr.Zero) { Native.DwmUnregisterThumbnail(thumb); thumb = IntPtr.Zero; } base.Dispose(disposing); }
     }

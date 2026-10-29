@@ -8,7 +8,7 @@ Windows 10/11 x64 便携壁纸选择器。将本机 Wallpaper Engine 的壁纸�
 
 ## 使用
 
-1. 将 `CodexWallpaper-1.2.0-win-x64.zip` 解压到一个长期保留的目录，保留 `media` 文件夹。
+1. 将 `CodexWallpaper-1.2.1-win-x64.zip` 解压到一个长期保留的目录，保留 `media` 文件夹。
 2. 这台电脑需要已安装 Wallpaper Engine 和 Codex / ChatGPT 客户端。
 3. 双击 `CodexWallpaper.exe`。程序自动查找 Steam 安装位置、Steam 多库目录和本地壁纸。
 4. 选择壁纸与动画开关，保留 **GPT / Codex 启动后自动应用**、**随 Windows 登录在后台启动**，点击一次 **保存并应用（以后自动）**。
@@ -16,6 +16,8 @@ Windows 10/11 x64 便携壁纸选择器。将本机 Wallpaper Engine 的壁纸�
 6. 之后直接从原来的 GPT / Codex 图标启动，软件自动接入保存的壁纸。点设置窗口的 **×** 或最小化会收进托盘；双击 EXE 或托盘图标可再次打开设置。
 
 ## 设置一次，自动生效（v1.2）
+
+v1.2.1 修复了冷启动焦点切换时跳过动画、动画被后续激活的客户端覆盖等问题，并减少静止窗口的重复合成操作。首次检测到后台窗口时最多等待 10 秒移交焦点，再自动应用；持续留在后台的窗口不播放动画、不抢焦点。
 
 - 后台进程约每 0.5 秒检查客户端窗口。Windows 登录启动使用当前用户的 `HKCU/Software/Microsoft/Windows/CurrentVersion/Run` 中独立的 `CodexWallpaper` 项，命令为本程序路径加 `--background`。不要求管理员权限，不改 GPT 快捷方式。
 - 登录后不弹设置窗口、不自动打开 GPT、不扫描整套壁纸库。检测到客户端出现后才读取已保存的那张壁纸；引擎未运行时尝试启动已配置的 Wallpaper Engine。
@@ -64,10 +66,11 @@ Windows 10/11 x64 便携壁纸选择器。将本机 Wallpaper Engine 的壁纸�
 
 ## 源码与构建
 
-在 Windows PowerShell 中运行 `./build.ps1`。编译器为系统自带的 .NET Framework C# 编译器，产物位于 `dist/CodexWallpaper-1.2.0`。开发源码采用 C# 5，界面使用 WinForms/WPF，无第三方运行库。
+在 Windows PowerShell 中运行 `./build.ps1`。编译器为系统自带的 .NET Framework C# 编译器，产物位于 `dist/CodexWallpaper-1.2.1`。开发源码采用 C# 5，界面使用 WinForms/WPF，无第三方运行库。
 
 运行 `./tests/run.ps1` 检查库扫描、损坏项目、目录边界、等比布局、Windows 参数引用及本机 DWM/透明度恢复。
-运行 `./tests/startup.ps1` 检查动画状态与开关迁移；`./tests/startup.ps1 -Live` 在测试窗口验证实际媒体播放和淡出（约 20 秒）。这些实机测试要求可用的交互式 Windows 桌面。
+运行 `./tests/startup.ps1` 检查动画状态与开关迁移；`./tests/startup.ps1 -Live` 在测试窗口验证实际媒体播放、模拟准备延迟和淡出（约 30 秒）。这些实机测试要求可用的交互式 Windows 桌面。
+运行 `./tests/regression.ps1` 检查焦点交接、静止窗口重复操作、移动及最小化恢复。
 运行 `./tests/background.ps1` 检查自动接入、窗口身份、重试、暂停、设置迁移、隔离注册表登录项及实例间通信。
 
 ## 依据
